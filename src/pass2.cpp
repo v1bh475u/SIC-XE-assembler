@@ -27,10 +27,11 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
   object_code.push_back(
       generate_header_record(prog_name, start_address_, program_length_));
 
-  // Generate Text records
+  // Generate Text records and track modification records
   std::string current_text;
   int text_start_addr = -1;
   int first_exec_addr = start_address_;
+  std::vector<std::string> modification_records;
 
   for (const auto &line : lines) {
     if (line.is_comment() || line.is_empty()) {
@@ -69,22 +70,63 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
       continue;
     }
 
+    // Check if this is a reserved data directive (RESB/RESW)
+    // These don't generate object code and should terminate the current text
+    // record
+    if (dir_type == DirectiveType::RESB || dir_type == DirectiveType::RESW) {
+      if (!current_text.empty() && text_start_addr != -1) {
+        object_code.push_back(
+            generate_text_record(text_start_addr, current_text));
+        current_text.clear();
+        text_start_addr = -1;
+      }
+      // Skip reserved data - no object code generated
+      continue;
+    }
+
     std::string code = encode_instruction(line);
     if (!code.empty()) {
+      bool needs_modification = false;
+      int mod_address = 0;
+      int mod_length = 0;
+
+      if (is_operand_relocatable(line)) {
+        // Format 4: 20-bit address field (5 half-bytes)
+        if (line.is_extended && code.length() == 8) {
+          needs_modification = true;
+          mod_address = line.address + 1; // Address field starts at byte 1
+          mod_length = 5;                 // 20 bits = 5 half-bytes
+        }
+        // Format 3 with SIC-compatible addressing (n=0, i=0): 12-bit address (3
+        // half-bytes) but we need to modify only if it's direct addressing
+        else if (code.length() == 6 &&
+                 line.addressing_mode == AddressingMode::SIC_COMPATIBLE) {
+          needs_modification = true;
+          mod_address = line.address + 1; // Address field starts at byte 1
+          mod_length = 3; // 12 bits = 3 half-bytes (actually we want to modify
+                          // the full address)
+        }
+      }
+
+      if (needs_modification) {
+        modification_records.push_back(
+            generate_modification_record(mod_address, mod_length));
+      }
+
+      // Check if adding this instruction would exceed 30 bytes (60 hex chars)
+      if (!current_text.empty() && current_text.length() + code.length() > 60) {
+        object_code.push_back(
+            generate_text_record(text_start_addr, current_text));
+        current_text.clear();
+        text_start_addr = -1;
+      }
+
       // Start a new text record if needed
       if (text_start_addr == -1) {
         text_start_addr = line.address;
       }
 
       current_text += code;
-
-      // Flush text record if it gets too long (max 60 bytes = 120 hex chars)
-      if (current_text.length() >= 60) {
-        object_code.push_back(
-            generate_text_record(text_start_addr, current_text));
-        current_text.clear();
-        text_start_addr = -1;
-      }
     }
   }
 
@@ -93,7 +135,10 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
     object_code.push_back(generate_text_record(text_start_addr, current_text));
   }
 
-  // Generate End record
+  for (const auto &mod_record : modification_records) {
+    object_code.push_back(mod_record);
+  }
+
   object_code.push_back(generate_end_record(first_exec_addr));
 
   return object_code;
@@ -122,6 +167,19 @@ std::string Pass2::generate_text_record(int start_addr,
 
   oss << "T" << std::hex << std::uppercase << std::setfill('0') << std::setw(6)
       << start_addr << std::setw(2) << byte_length << object_code;
+
+  return oss.str();
+}
+
+std::string Pass2::generate_modification_record(int address,
+                                                int length_half_bytes) {
+  std::ostringstream oss;
+
+  // Format: M^address^length_in_half_bytes
+  // For format 4 instructions, the address field starts at byte 1 (after
+  // opcode) and is 20 bits (5 hex digits = 5 half-bytes)
+  oss << "M" << std::hex << std::uppercase << std::setfill('0') << std::setw(6)
+      << address << std::setw(2) << length_half_bytes;
 
   return oss.str();
 }
@@ -305,6 +363,30 @@ std::string Pass2::encode_format4(const Format4 &fmt) {
       << static_cast<int>(byte4);
 
   return oss.str();
+}
+
+bool Pass2::is_operand_relocatable(const Line &line) const {
+  // No operand means not relocatable
+  if (!line.operand.has_value()) {
+    return false;
+  }
+
+  std::string operand = line.operand.value();
+
+  // Immediate addressing mode: value is absolute (not relocatable)
+  if (line.addressing_mode == AddressingMode::IMMEDIATE) {
+    return false;
+  }
+
+  // Check if operand is a symbol
+  auto symbol = symbol_table_.lookup(operand);
+  if (symbol.has_value()) {
+    // Return the relocatable status of the symbol
+    return symbol->is_relocatable;
+  }
+
+  // If it's a numeric literal, it's absolute
+  return false;
 }
 
 int Pass2::resolve_operand(const std::string &operand, int /*current_address*/,

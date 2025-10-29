@@ -83,7 +83,10 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
       line.label = label;
     }
 
-    auto result = symbol_table_.insert(label, location_counter_);
+    // All labels that refer to memory addresses are relocatable
+    // (they will be adjusted when the program is loaded)
+    Symbol sym(label, location_counter_, true);
+    auto result = symbol_table_.insert(sym);
     if (result.is_err()) {
       error_handler_.add_duplicate_symbol_error(label, line_num);
     }

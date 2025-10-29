@@ -45,11 +45,13 @@ private:
 
   int resolve_operand(const std::string &operand, int current_address,
                       const Line &line);
+  bool is_operand_relocatable(const Line &line) const;
 
   std::string generate_header_record(const std::string &prog_name, int start,
                                      int length);
   std::string generate_text_record(int start_addr,
                                    const std::string &object_code);
+  std::string generate_modification_record(int address, int length_half_bytes);
   std::string generate_end_record(int first_exec_addr);
 
   const OpcodeEncoder &encoder_;
