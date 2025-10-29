@@ -66,21 +66,54 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
       return;
     }
 
-    if (dir_type == DirectiveType::END) {
-      auto unaddressed = literal_table_.get_unaddressed_literals();
+    if (dir_type == DirectiveType::LTORG) {
+      auto unaddressed_names = literal_table_.get_unaddressed_literal_names();
 
-      for (auto *lit : unaddressed) {
-        lit->address = location_counter_;
+      for (const auto &lit_name : unaddressed_names) {
+        auto lit_opt = literal_table_.lookup(lit_name);
+        if (!lit_opt.has_value()) {
+          continue;
+        }
+
+        const Literal &lit = lit_opt.value();
+        literal_table_.assign_address(lit_name, location_counter_);
 
         Line lit_line;
         lit_line.line_number = line_num;
         lit_line.type = LineType::DIRECTIVE;
         lit_line.mnemonic = "*LITERAL*"; // Special marker
-        lit_line.operand = lit->name;
+        lit_line.operand = lit.name;
         lit_line.address = location_counter_;
 
         lines_.push_back(lit_line);
-        location_counter_ += lit->length;
+        location_counter_ += lit.length;
+      }
+
+      lines_.push_back(line);
+      return;
+    }
+
+    if (dir_type == DirectiveType::END) {
+      auto unaddressed_names = literal_table_.get_unaddressed_literal_names();
+
+      for (const auto &lit_name : unaddressed_names) {
+        auto lit_opt = literal_table_.lookup(lit_name);
+        if (!lit_opt.has_value()) {
+          continue;
+        }
+
+        const Literal &lit = lit_opt.value();
+        literal_table_.assign_address(lit_name, location_counter_);
+
+        Line lit_line;
+        lit_line.line_number = line_num;
+        lit_line.type = LineType::DIRECTIVE;
+        lit_line.mnemonic = "*LITERAL*"; // Special marker
+        lit_line.operand = lit.name;
+        lit_line.address = location_counter_;
+
+        lines_.push_back(lit_line);
+        location_counter_ += lit.length;
       }
 
       lines_.push_back(line);

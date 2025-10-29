@@ -35,11 +35,11 @@ bool LiteralTable::exists(const std::string &name) const {
   return find_index(name) != -1;
 }
 
-std::vector<Literal *> LiteralTable::get_unaddressed_literals() {
-  std::vector<Literal *> unaddressed;
-  for (auto &lit : literals_) {
+std::vector<std::string> LiteralTable::get_unaddressed_literal_names() const {
+  std::vector<std::string> unaddressed;
+  for (const auto &lit : literals_) {
     if (!lit.has_address()) {
-      unaddressed.push_back(&lit);
+      unaddressed.push_back(lit.name);
     }
   }
   return unaddressed;

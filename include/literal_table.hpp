@@ -19,7 +19,7 @@ public:
 
   bool exists(const std::string &name) const;
 
-  std::vector<Literal *> get_unaddressed_literals();
+  std::vector<std::string> get_unaddressed_literal_names() const;
 
   void assign_address(const std::string &name, int address);
 
