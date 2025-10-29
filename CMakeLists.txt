@@ -26,6 +26,7 @@ set(SOURCES
     src/addressing_mode.cpp
     src/directive.cpp
     src/literal_parser.cpp
+    src/literal_table.cpp
     src/error_handler.cpp
     src/warning_handler.cpp
 )
