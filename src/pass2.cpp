@@ -70,6 +70,26 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
       continue;
     }
 
+    if (dir_type == DirectiveType::BASE) {
+      if (line.operand.has_value()) {
+        auto addr = symbol_table_.get_address(line.operand.value());
+        if (addr.has_value()) {
+          base_register_set_ = true;
+          base_register_value_ = addr.value();
+        } else {
+          error_handler_.add_undefined_symbol_error(line.operand.value(),
+                                                    line.line_number);
+        }
+      }
+      continue; // BASE generates no object code
+    }
+
+    if (dir_type == DirectiveType::NOBASE) {
+      base_register_set_ = false;
+      base_register_value_ = 0;
+      continue; // NOBASE generates no object code
+    }
+
     // Check if this is a reserved data directive (RESB/RESW)
     // These don't generate object code and should terminate the current text
     // record
@@ -260,10 +280,31 @@ std::string Pass2::encode_instruction(const Line &line) {
         fmt.flags.b = false;
         fmt.displacement = displacement & 0xFFF;
       } else {
-        // TODO: Try base-relative or direct addressing
-        fmt.flags.p = false;
-        fmt.flags.b = false;
-        fmt.displacement = target_address & 0xFFF;
+        bool base_relative_ok = false;
+        if (base_register_set_) {
+          int base_displacement = target_address - base_register_value_;
+          // Base-relative: displacement must be in range [0, 4095] (12 bits
+          // unsigned)
+          if (base_displacement >= 0 && base_displacement <= 4095) {
+            fmt.flags.p = false;
+            fmt.flags.b = true;
+            fmt.displacement = base_displacement & 0xFFF;
+            base_relative_ok = true;
+          }
+        }
+
+        // If base-relative didn't work, it's an error
+        if (!base_relative_ok) {
+          error_handler_.add_addressing_error(
+              "Address out of range for PC-relative and base-relative "
+              "addressing. "
+              "Use format 4 (+) or set BASE register.",
+              line.line_number);
+          // Use direct addressing as fallback (will likely be wrong)
+          fmt.flags.p = false;
+          fmt.flags.b = false;
+          fmt.displacement = target_address & 0xFFF;
+        }
       }
     } else {
       fmt.displacement = 0;

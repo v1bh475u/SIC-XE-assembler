@@ -60,6 +60,9 @@ private:
   int start_address_;
   int program_length_;
 
+  bool base_register_set_ = false;
+  int base_register_value_ = 0;
+
   Pass2ErrorHandler error_handler_;
   Pass2WarningHandler warning_handler_;
 };
