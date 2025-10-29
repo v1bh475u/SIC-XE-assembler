@@ -66,6 +66,70 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
       return;
     }
 
+    if (dir_type == DirectiveType::ORG) {
+      if (line.has_label()) {
+        std::string label = line.label.value();
+
+        if (label.length() > 6) {
+          std::string truncated = label.substr(0, 6);
+          warning_handler_.add_symbol_truncated_warning(label, truncated,
+                                                        line_num);
+          label = truncated;
+          line.label = label;
+        }
+
+        Symbol sym(label, location_counter_, true);
+        auto result = symbol_table_.insert(sym);
+        if (result.is_err()) {
+          error_handler_.add_duplicate_symbol_error(label, line_num);
+        }
+      }
+
+      if (line.has_operand()) {
+        // ORG with operand: can be a hex value or a symbol
+        std::string operand = line.operand.value();
+        int new_address = -1;
+        bool valid = false;
+
+        // Try to parse as hexadecimal value first
+        try {
+          new_address = std::stoi(operand, nullptr, 16);
+          valid = true;
+        } catch (...) {
+          // Not a hex value, try as a symbol
+          auto symbol = symbol_table_.lookup(operand);
+          if (symbol.has_value()) {
+            new_address = symbol->address;
+            valid = true;
+          } else {
+            error_handler_.add_error(
+                ErrorCode::UNDEFINED_SYMBOL,
+                "ORG operand '" + operand +
+                    "' is not a valid address or defined symbol",
+                line_num);
+          }
+        }
+
+        if (valid) {
+          saved_location_counter_ = location_counter_;
+          location_counter_ = new_address;
+        }
+      } else {
+        // ORG without operand: restore saved location counter
+        if (saved_location_counter_.has_value()) {
+          location_counter_ = saved_location_counter_.value();
+          saved_location_counter_ = std::nullopt;
+        } else {
+          error_handler_.add_error(
+              ErrorCode::SYNTAX_ERROR,
+              "ORG without operand called but no saved location counter exists",
+              line_num);
+        }
+      }
+      lines_.push_back(line);
+      return;
+    }
+
     if (dir_type == DirectiveType::LTORG) {
       auto unaddressed_names = literal_table_.get_unaddressed_literal_names();
 

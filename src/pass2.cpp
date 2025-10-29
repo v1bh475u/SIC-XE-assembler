@@ -93,6 +93,16 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
       continue; // NOBASE generates no object code
     }
 
+    if (dir_type == DirectiveType::ORG) {
+      if (!current_text.empty() && text_start_addr != -1) {
+        object_code.push_back(
+            generate_text_record(text_start_addr, current_text));
+        current_text.clear();
+        text_start_addr = -1;
+      }
+      continue; // ORG generates no object code
+    }
+
     // Check if this is a reserved data directive (RESB/RESW)
     // These don't generate object code and should terminate the current text
     // record

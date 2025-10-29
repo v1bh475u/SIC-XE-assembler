@@ -54,6 +54,7 @@ private:
   int location_counter_;
   int start_address_;
   int program_length_;
+  std::optional<int> saved_location_counter_;
 
   Pass1ErrorHandler error_handler_;
   Pass1WarningHandler warning_handler_;

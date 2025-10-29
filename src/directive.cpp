@@ -36,6 +36,7 @@ void DirectiveRegistry::initialize_standard_directives() {
   register_directive("BASE", std::make_unique<BaseDirective>());
   register_directive("NOBASE", std::make_unique<NoBaseDirective>());
   register_directive("LTORG", std::make_unique<LtorgDirective>());
+  register_directive("ORG", std::make_unique<OrgDirective>());
 }
 
 bool DirectiveRegistry::is_directive(const std::string &mnemonic) const {
@@ -261,6 +262,19 @@ DirectiveResult LtorgDirective::process_pass1(const Line &line,
 std::string LtorgDirective::generate_object_code(const Line &line,
                                                  const SymbolTable &symtab) {
   return ""; // LTORG generates no object code directly (literals do)
+}
+
+DirectiveResult OrgDirective::process_pass1(const Line &line,
+                                            int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0; // ORG doesn't allocate space itself
+  result.should_add_to_symbol_table = false;
+  return result;
+}
+
+std::string OrgDirective::generate_object_code(const Line &line,
+                                               const SymbolTable &symtab) {
+  return ""; // ORG generates no object code
 }
 
 } // namespace sicxe
