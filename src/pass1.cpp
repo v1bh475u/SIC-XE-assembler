@@ -1,6 +1,7 @@
 #include "pass1.hpp"
 #include "directive.hpp"
 #include "error_handler.hpp"
+#include "literal_parser.hpp"
 #include <fstream>
 #include <sstream>
 
@@ -65,14 +66,28 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
       return;
     }
 
-    // Handle END directive
     if (dir_type == DirectiveType::END) {
+      auto unaddressed = literal_table_.get_unaddressed_literals();
+
+      for (auto *lit : unaddressed) {
+        lit->address = location_counter_;
+
+        Line lit_line;
+        lit_line.line_number = line_num;
+        lit_line.type = LineType::DIRECTIVE;
+        lit_line.mnemonic = "*LITERAL*"; // Special marker
+        lit_line.operand = lit->name;
+        lit_line.address = location_counter_;
+
+        lines_.push_back(lit_line);
+        location_counter_ += lit->length;
+      }
+
       lines_.push_back(line);
       return;
     }
   }
 
-  // Add label to symbol table if present
   if (line.has_label()) {
     std::string label = line.label.value();
 
@@ -208,6 +223,18 @@ void Pass1::parse_addressing_mode(Line &line) {
       line.is_indexed = true;
       op = op.substr(0, comma_pos);
     }
+  }
+
+  if (!op.empty() && op[0] == '=') {
+    line.addressing_mode = AddressingMode::SIMPLE;
+    auto parse_result = LiteralParser::parse_literal(op.substr(1));
+    if (parse_result.is_ok()) {
+      literal_table_.add_literal(op, parse_result.value());
+    } else {
+      error_handler_.add_syntax_error(parse_result.error().message,
+                                      line.line_number);
+    }
+    return;
   }
 
   // Check addressing prefix

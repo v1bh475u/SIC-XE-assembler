@@ -34,8 +34,8 @@ void Assembler::assemble(const std::string &input_filename,
   std::cout << "Program length: 0x" << std::hex << pass1.get_program_length()
             << std::dec << "\n\n";
 
-  Pass2 pass2(encoder, pass1.get_symbol_table(), pass1.get_start_address(),
-              pass1.get_program_length());
+  Pass2 pass2(encoder, pass1.get_symbol_table(), pass1.get_literal_table(),
+              pass1.get_start_address(), pass1.get_program_length());
   auto object_code = pass2.generate_object_code(pass1.get_lines());
 
   if (pass2.has_errors()) {

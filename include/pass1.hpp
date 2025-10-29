@@ -4,6 +4,7 @@
 #include "directive.hpp"
 #include "error_handler.hpp"
 #include "line.hpp"
+#include "literal_table.hpp"
 #include "opcode_encoder.hpp"
 #include "symbol_table.hpp"
 #include "warning_handler.hpp"
@@ -18,6 +19,7 @@ public:
 
   void process(const std::string &filename);
   const SymbolTable &get_symbol_table() const { return symbol_table_; }
+  const LiteralTable &get_literal_table() const { return literal_table_; }
   const std::vector<Line> &get_lines() const { return lines_; }
   int get_program_length() const { return program_length_; }
   int get_start_address() const { return start_address_; }
@@ -47,6 +49,7 @@ private:
   const OpcodeEncoder &encoder_;
   DirectiveRegistry directive_registry_;
   SymbolTable symbol_table_;
+  LiteralTable literal_table_;
   std::vector<Line> lines_;
   int location_counter_;
   int start_address_;

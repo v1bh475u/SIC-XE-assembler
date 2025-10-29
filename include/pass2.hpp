@@ -5,6 +5,7 @@
 #include "error_handler.hpp"
 #include "instruction.hpp"
 #include "line.hpp"
+#include "literal_table.hpp"
 #include "opcode_encoder.hpp"
 #include "symbol_table.hpp"
 #include "warning_handler.hpp"
@@ -16,7 +17,8 @@ namespace sicxe {
 class Pass2 {
 public:
   Pass2(const OpcodeEncoder &encoder, const SymbolTable &symbol_table,
-        int start_address, int program_length);
+        const LiteralTable &literal_table, int start_address,
+        int program_length);
 
   std::vector<std::string>
   generate_object_code(const std::vector<Line> &lines,
@@ -56,6 +58,7 @@ private:
 
   const OpcodeEncoder &encoder_;
   const SymbolTable &symbol_table_;
+  const LiteralTable &literal_table_;
   DirectiveRegistry directive_registry_;
   int start_address_;
   int program_length_;

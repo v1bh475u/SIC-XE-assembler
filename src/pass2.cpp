@@ -1,14 +1,17 @@
 #include "pass2.hpp"
 #include "error_handler.hpp"
+#include "literal_parser.hpp"
 #include <iomanip>
 #include <sstream>
 
 namespace sicxe {
 
 Pass2::Pass2(const OpcodeEncoder &encoder, const SymbolTable &symbol_table,
-             int start_address, int program_length)
+             const LiteralTable &literal_table, int start_address,
+             int program_length)
     : encoder_(encoder), symbol_table_(symbol_table),
-      start_address_(start_address), program_length_(program_length) {}
+      literal_table_(literal_table), start_address_(start_address),
+      program_length_(program_length) {}
 
 std::vector<std::string>
 Pass2::generate_object_code(const std::vector<Line> &lines,
@@ -215,6 +218,14 @@ std::string Pass2::generate_end_record(int first_exec_addr) {
 }
 
 std::string Pass2::encode_instruction(const Line &line) {
+  if (line.mnemonic == "*LITERAL*" && line.operand.has_value()) {
+    auto lit = literal_table_.lookup(line.operand.value());
+    if (lit.has_value()) {
+      return LiteralParser::bytes_to_hex(lit->value);
+    }
+    return "";
+  }
+
   // Handle directives
   if (directive_registry_.is_directive(line.mnemonic)) {
     auto handler = directive_registry_.get_handler(line.mnemonic);
@@ -414,6 +425,10 @@ bool Pass2::is_operand_relocatable(const Line &line) const {
 
   std::string operand = line.operand.value();
 
+  if (!operand.empty() && operand[0] == '=') {
+    return true;
+  }
+
   // Immediate addressing mode: value is absolute (not relocatable)
   if (line.addressing_mode == AddressingMode::IMMEDIATE) {
     return false;
@@ -432,6 +447,16 @@ bool Pass2::is_operand_relocatable(const Line &line) const {
 
 int Pass2::resolve_operand(const std::string &operand, int /*current_address*/,
                            const Line &line) {
+  if (!operand.empty() && operand[0] == '=') {
+    auto lit_addr = literal_table_.get_address(operand);
+    if (lit_addr.has_value()) {
+      return lit_addr.value();
+    }
+    error_handler_.add_undefined_symbol_error("Literal " + operand,
+                                              line.line_number);
+    return 0;
+  }
+
   // Handle immediate values
   if (line.addressing_mode == AddressingMode::IMMEDIATE) {
     try {
