@@ -33,6 +33,8 @@ void DirectiveRegistry::initialize_standard_directives() {
   register_directive("WORD", std::make_unique<WordDirective>());
   register_directive("RESB", std::make_unique<ReserveByte>());
   register_directive("RESW", std::make_unique<ReserveWord>());
+  register_directive("BASE", std::make_unique<BaseDirective>());
+  register_directive("NOBASE", std::make_unique<NoBaseDirective>());
 }
 
 bool DirectiveRegistry::is_directive(const std::string &mnemonic) const {
@@ -212,6 +214,39 @@ DirectiveResult ReserveWord::process_pass1(const Line &line,
 std::string ReserveWord::generate_object_code(const Line &line,
                                               const SymbolTable &symtab) {
   return ""; // RESW generates no object code (just reserves space)
+}
+
+DirectiveResult BaseDirective::process_pass1(const Line &line,
+                                             int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0; // BASE doesn't allocate space
+  result.should_add_to_symbol_table = false;
+
+  if (!line.operand.has_value()) {
+    result.error_message = "BASE directive requires an operand (symbol name)";
+  }
+
+  return result;
+}
+
+std::string BaseDirective::generate_object_code(const Line &line,
+                                                const SymbolTable &symtab) {
+  return ""; // BASE generates no object code (just sets register)
+}
+
+// NOBASE directive
+
+DirectiveResult NoBaseDirective::process_pass1(const Line &line,
+                                               int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0; // NOBASE doesn't allocate space
+  result.should_add_to_symbol_table = false;
+  return result;
+}
+
+std::string NoBaseDirective::generate_object_code(const Line &line,
+                                                  const SymbolTable &symtab) {
+  return ""; // NOBASE generates no object code (just clears register)
 }
 
 } // namespace sicxe

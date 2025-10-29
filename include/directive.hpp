@@ -120,6 +120,20 @@ public:
                                    const SymbolTable &symtab) override;
 };
 
+class BaseDirective : public DirectiveHandler {
+public:
+  DirectiveResult process_pass1(const Line &line, int current_address) override;
+  std::string generate_object_code(const Line &line,
+                                   const SymbolTable &symtab) override;
+};
+
+class NoBaseDirective : public DirectiveHandler {
+public:
+  DirectiveResult process_pass1(const Line &line, int current_address) override;
+  std::string generate_object_code(const Line &line,
+                                   const SymbolTable &symtab) override;
+};
+
 } // namespace sicxe
 
 #endif // DIRECTIVE_HPP
