@@ -17,7 +17,8 @@ DirectiveType string_to_directive(const std::string &str) {
       {"BASE", DirectiveType::BASE},     {"NOBASE", DirectiveType::NOBASE},
       {"LTORG", DirectiveType::LTORG},   {"EQU", DirectiveType::EQU},
       {"ORG", DirectiveType::ORG},       {"CSECT", DirectiveType::CSECT},
-      {"EXTDEF", DirectiveType::EXTDEF}, {"EXTREF", DirectiveType::EXTREF}};
+      {"EXTDEF", DirectiveType::EXTDEF}, {"EXTREF", DirectiveType::EXTREF},
+      {"USE", DirectiveType::USE}};
 
   auto it = directive_map.find(str);
   return it != directive_map.end() ? it->second : DirectiveType::UNKNOWN;
@@ -42,6 +43,7 @@ void DirectiveRegistry::initialize_standard_directives() {
   register_directive("CSECT", std::make_unique<CsectDirective>());
   register_directive("EXTDEF", std::make_unique<ExtdefDirective>());
   register_directive("EXTREF", std::make_unique<ExtrefDirective>());
+  register_directive("USE", std::make_unique<UseDirective>());
 }
 
 bool DirectiveRegistry::is_directive(const std::string &mnemonic) const {
@@ -333,6 +335,23 @@ DirectiveResult ExtrefDirective::process_pass1(const Line &line,
 std::string ExtrefDirective::generate_object_code(const Line &line,
                                                   const SymbolTable &symtab) {
   return ""; // EXTREF generates no object code
+}
+
+// USE directive - not supported, generate error
+
+DirectiveResult UseDirective::process_pass1(const Line &line,
+                                            int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0;
+  result.should_add_to_symbol_table = false;
+  result.error_message = "USE directive is not supported. This assembler does "
+                         "not support control sections with USE.";
+  return result;
+}
+
+std::string UseDirective::generate_object_code(const Line &line,
+                                               const SymbolTable &symtab) {
+  return ""; // USE generates no object code (error already reported)
 }
 
 } // namespace sicxe

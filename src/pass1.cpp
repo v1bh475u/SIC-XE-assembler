@@ -69,7 +69,8 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
             std::string hex_str = operand.substr(2, operand.length() - 3);
             start_addr = std::stoi(hex_str, nullptr, 16);
           } else {
-            start_addr = std::stoi(operand, nullptr, 10);
+            // In SIC/XE, numeric operands are hexadecimal by default
+            start_addr = std::stoi(operand, nullptr, 16);
           }
         } catch (...) {
           error_handler_.add_invalid_start_address_error(line_num);

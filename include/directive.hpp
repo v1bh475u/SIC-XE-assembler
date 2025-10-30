@@ -28,6 +28,7 @@ enum class DirectiveType {
   CSECT,
   EXTDEF,
   EXTREF,
+  USE,
   UNKNOWN
 };
 
@@ -173,6 +174,13 @@ public:
 };
 
 class ExtrefDirective : public DirectiveHandler {
+public:
+  DirectiveResult process_pass1(const Line &line, int current_address) override;
+  std::string generate_object_code(const Line &line,
+                                   const SymbolTable &symtab) override;
+};
+
+class UseDirective : public DirectiveHandler {
 public:
   DirectiveResult process_pass1(const Line &line, int current_address) override;
   std::string generate_object_code(const Line &line,

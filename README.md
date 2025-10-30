@@ -44,6 +44,7 @@ All directives are handled through an extensible registry system:
 - `CSECT` - Define control section
 - `EXTDEF` - Declare external definitions
 - `EXTREF` - Declare external references
+- `USE` - **Not supported** (error message will be displayed)
 
 ### Literal Support
 - **Hexadecimal literals**: `X'A1B2'` → bytes `0xA1 0xB2`
@@ -199,6 +200,21 @@ The key distinction:
 - `LDA #SYMBOL` → PC/base-relative displacement to SYMBOL's address
 
 This allows immediate mode to reference symbol addresses that are beyond the 12-bit immediate value range by using relative addressing.
+
+## Limitations and Unsupported Features
+
+### USE Directive
+The `USE` directive for managing multiple control sections is **not supported**. If encountered, the assembler will display an error message:
+```
+[Error] Line X: USE directive is not supported. This assembler does not support control sections with USE.
+```
+
+**Workaround**: Use `CSECT` for multiple control sections, but note that they will be processed sequentially without the ability to interleave sections.
+
+### Other Known Limitations
+- No support for floating-point immediate values
+- No support for assembler expressions in operands (e.g., `SYMBOL+10`)
+- Limited support for forward references in EQU directives
 
 ## Opcodes Supported
 
