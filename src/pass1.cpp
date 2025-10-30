@@ -9,7 +9,7 @@ namespace sicxe {
 
 Pass1::Pass1(const OpcodeEncoder &encoder)
     : encoder_(encoder), location_counter_(0), start_address_(0),
-      program_length_(0) {}
+      program_length_(0), current_section_index_(0) {}
 
 void Pass1::process(const std::string &filename) {
   std::ifstream file(filename);
@@ -33,6 +33,10 @@ void Pass1::process(const std::string &filename) {
     }
   }
 
+  if (!control_sections_.empty() && !lines_.empty()) {
+    finalize_current_section();
+  }
+
   program_length_ = location_counter_ - start_address_;
 }
 
@@ -53,15 +57,171 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
     DirectiveType dir_type = string_to_directive(line.mnemonic);
 
     if (dir_type == DirectiveType::START) {
+      std::string section_name =
+          line.has_label() ? line.label.value() : "DEFAULT";
+      int start_addr = 0;
+
       if (line.has_operand()) {
+        std::string operand = line.operand.value();
         try {
-          location_counter_ = std::stoi(line.operand.value(), nullptr, 16);
-          start_address_ = location_counter_;
-          line.address = location_counter_;
+          if (operand.length() >= 3 && operand[0] == 'X' &&
+              operand[1] == '\'' && operand.back() == '\'') {
+            std::string hex_str = operand.substr(2, operand.length() - 3);
+            start_addr = std::stoi(hex_str, nullptr, 16);
+          } else {
+            start_addr = std::stoi(operand, nullptr, 10);
+          }
         } catch (...) {
           error_handler_.add_invalid_start_address_error(line_num);
         }
       }
+
+      start_new_section(section_name, start_addr);
+      program_name_ = section_name;
+      line.address = start_addr;
+      lines_.push_back(line);
+      return;
+    }
+
+    if (dir_type == DirectiveType::CSECT) {
+      // Finalize the previous section if it exists and has content
+      if (!control_sections_.empty() && !lines_.empty()) {
+        finalize_current_section();
+      }
+
+      std::string section_name =
+          line.has_label() ? line.label.value() : "CSECT";
+      start_new_section(section_name, 0);
+      program_name_ = section_name;
+      line.address = 0;
+      lines_.push_back(line);
+      return;
+    }
+
+    if (dir_type == DirectiveType::EXTDEF) {
+      if (!line.has_operand()) {
+        error_handler_.add_error(ErrorCode::SYNTAX_ERROR,
+                                 "EXTDEF directive requires operands",
+                                 line_num);
+        lines_.push_back(line);
+        return;
+      }
+
+      // Parse comma-separated symbols
+      std::string operands = line.operand.value();
+      std::stringstream ss(operands);
+      std::string symbol;
+      while (std::getline(ss, symbol, ',')) {
+        // Trim whitespace
+        symbol.erase(0, symbol.find_first_not_of(" \t"));
+        symbol.erase(symbol.find_last_not_of(" \t") + 1);
+        if (!symbol.empty()) {
+          extdef_symbols_.push_back(symbol);
+        }
+      }
+      lines_.push_back(line);
+      return;
+    }
+
+    if (dir_type == DirectiveType::EXTREF) {
+      if (!line.has_operand()) {
+        error_handler_.add_error(ErrorCode::SYNTAX_ERROR,
+                                 "EXTREF directive requires operands",
+                                 line_num);
+        lines_.push_back(line);
+        return;
+      }
+
+      std::string operands = line.operand.value();
+      std::stringstream ss(operands);
+      std::string symbol;
+      while (std::getline(ss, symbol, ',')) {
+        // Trim whitespace
+        symbol.erase(0, symbol.find_first_not_of(" \t"));
+        symbol.erase(symbol.find_last_not_of(" \t") + 1);
+        if (!symbol.empty()) {
+          extref_symbols_.push_back(symbol);
+          // Add EXTREF symbol to symbol table as external
+          Symbol sym(symbol, 0, false, true);
+          auto result = symbol_table_.insert(sym);
+          if (result.is_err()) {
+            error_handler_.add_duplicate_symbol_error(symbol, line_num);
+          }
+        }
+      }
+      lines_.push_back(line);
+      return;
+    }
+
+    if (dir_type == DirectiveType::EQU) {
+      if (!line.has_label()) {
+        error_handler_.add_error(ErrorCode::SYNTAX_ERROR,
+                                 "EQU directive requires a label", line_num);
+        lines_.push_back(line);
+        return;
+      }
+
+      if (!line.has_operand()) {
+        error_handler_.add_error(ErrorCode::SYNTAX_ERROR,
+                                 "EQU directive requires an operand", line_num);
+        lines_.push_back(line);
+        return;
+      }
+
+      std::string label = line.label.value();
+      std::string operand = line.operand.value();
+      int value = 0;
+      bool valid = false;
+
+      if (operand == "*") {
+        value = location_counter_;
+        valid = true;
+      } else if (operand.length() >= 3 && operand[0] == 'X' &&
+                 operand[1] == '\'' && operand.back() == '\'') {
+        std::string hex_str = operand.substr(2, operand.length() - 3);
+        try {
+          value = std::stoi(hex_str, nullptr, 16);
+          valid = true;
+        } catch (...) {
+          error_handler_.add_error(ErrorCode::INVALID_OPERAND,
+                                   "EQU operand has invalid hexadecimal format",
+                                   line_num);
+        }
+      } else {
+        try {
+          value = std::stoi(operand, nullptr, 10);
+          valid = true;
+        } catch (...) {
+          auto symbol = symbol_table_.lookup(operand);
+          if (symbol.has_value()) {
+            value = symbol->address;
+            valid = true;
+          } else {
+            error_handler_.add_error(
+                ErrorCode::UNDEFINED_SYMBOL,
+                "EQU operand '" + operand +
+                    "' is not a valid value or defined symbol",
+                line_num);
+          }
+        }
+      }
+
+      if (valid) {
+        if (label.length() > 6) {
+          std::string truncated = label.substr(0, 6);
+          warning_handler_.add_symbol_truncated_warning(label, truncated,
+                                                        line_num);
+          label = truncated;
+          line.label = label;
+        }
+
+        Symbol sym(label, value, false);
+        auto result = symbol_table_.insert(sym);
+        if (result.is_err()) {
+          error_handler_.add_duplicate_symbol_error(label, line_num);
+        }
+      }
+
       lines_.push_back(line);
       return;
     }
@@ -86,27 +246,43 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
       }
 
       if (line.has_operand()) {
-        // ORG with operand: can be a hex value or a symbol
+        // ORG with operand: can be a decimal value, hex in X'...' format, or a
+        // symbol
         std::string operand = line.operand.value();
         int new_address = -1;
         bool valid = false;
 
-        // Try to parse as hexadecimal value first
-        try {
-          new_address = std::stoi(operand, nullptr, 16);
-          valid = true;
-        } catch (...) {
-          // Not a hex value, try as a symbol
-          auto symbol = symbol_table_.lookup(operand);
-          if (symbol.has_value()) {
-            new_address = symbol->address;
+        // Check if operand is in X'...' format (hexadecimal)
+        if (operand.length() >= 3 && operand[0] == 'X' && operand[1] == '\'' &&
+            operand.back() == '\'') {
+          // Extract hex value from X'...'
+          std::string hex_str = operand.substr(2, operand.length() - 3);
+          try {
+            new_address = std::stoi(hex_str, nullptr, 16);
             valid = true;
-          } else {
+          } catch (...) {
             error_handler_.add_error(
-                ErrorCode::UNDEFINED_SYMBOL,
-                "ORG operand '" + operand +
-                    "' is not a valid address or defined symbol",
-                line_num);
+                ErrorCode::INVALID_OPERAND,
+                "ORG operand has invalid hexadecimal format", line_num);
+          }
+        } else {
+          // Try to parse as decimal value first
+          try {
+            new_address = std::stoi(operand, nullptr, 10);
+            valid = true;
+          } catch (...) {
+            // Not a decimal value, try as a symbol
+            auto symbol = symbol_table_.lookup(operand);
+            if (symbol.has_value()) {
+              new_address = symbol->address;
+              valid = true;
+            } else {
+              error_handler_.add_error(
+                  ErrorCode::UNDEFINED_SYMBOL,
+                  "ORG operand '" + operand +
+                      "' is not a valid address or defined symbol",
+                  line_num);
+            }
           }
         }
 
@@ -181,6 +357,8 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
       }
 
       lines_.push_back(line);
+
+      finalize_current_section();
       return;
     }
   }
@@ -382,6 +560,37 @@ int Pass1::calculate_size(const Line &line) {
   }
 
   return 0;
+}
+
+void Pass1::start_new_section(const std::string &name, int start_addr) {
+  ControlSection section(name, start_addr);
+  control_sections_.push_back(section);
+  current_section_index_ = control_sections_.size() - 1;
+
+  // Reset state for new section
+  location_counter_ = start_addr;
+  start_address_ = start_addr;
+  extdef_symbols_.clear();
+  extref_symbols_.clear();
+}
+
+void Pass1::finalize_current_section() {
+  if (control_sections_.empty()) {
+    return;
+  }
+
+  ControlSection &section = control_sections_[current_section_index_];
+  section.length = location_counter_ - section.start_address;
+  section.extdef_symbols = extdef_symbols_;
+  section.extref_symbols = extref_symbols_;
+  section.lines = lines_;
+  section.symbol_table = symbol_table_;
+  section.literal_table = literal_table_;
+
+  // Clear state for next section
+  lines_.clear();
+  symbol_table_ = SymbolTable();
+  literal_table_ = LiteralTable();
 }
 
 } // namespace sicxe

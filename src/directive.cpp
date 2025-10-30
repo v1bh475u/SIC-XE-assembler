@@ -11,12 +11,13 @@ namespace sicxe {
 // Helper to convert string to DirectiveType
 DirectiveType string_to_directive(const std::string &str) {
   static const std::unordered_map<std::string, DirectiveType> directive_map = {
-      {"START", DirectiveType::START}, {"END", DirectiveType::END},
-      {"BYTE", DirectiveType::BYTE},   {"WORD", DirectiveType::WORD},
-      {"RESB", DirectiveType::RESB},   {"RESW", DirectiveType::RESW},
-      {"BASE", DirectiveType::BASE},   {"NOBASE", DirectiveType::NOBASE},
-      {"LTORG", DirectiveType::LTORG}, {"EQU", DirectiveType::EQU},
-      {"ORG", DirectiveType::ORG}};
+      {"START", DirectiveType::START},   {"END", DirectiveType::END},
+      {"BYTE", DirectiveType::BYTE},     {"WORD", DirectiveType::WORD},
+      {"RESB", DirectiveType::RESB},     {"RESW", DirectiveType::RESW},
+      {"BASE", DirectiveType::BASE},     {"NOBASE", DirectiveType::NOBASE},
+      {"LTORG", DirectiveType::LTORG},   {"EQU", DirectiveType::EQU},
+      {"ORG", DirectiveType::ORG},       {"CSECT", DirectiveType::CSECT},
+      {"EXTDEF", DirectiveType::EXTDEF}, {"EXTREF", DirectiveType::EXTREF}};
 
   auto it = directive_map.find(str);
   return it != directive_map.end() ? it->second : DirectiveType::UNKNOWN;
@@ -37,6 +38,10 @@ void DirectiveRegistry::initialize_standard_directives() {
   register_directive("NOBASE", std::make_unique<NoBaseDirective>());
   register_directive("LTORG", std::make_unique<LtorgDirective>());
   register_directive("ORG", std::make_unique<OrgDirective>());
+  register_directive("EQU", std::make_unique<EquDirective>());
+  register_directive("CSECT", std::make_unique<CsectDirective>());
+  register_directive("EXTDEF", std::make_unique<ExtdefDirective>());
+  register_directive("EXTREF", std::make_unique<ExtrefDirective>());
 }
 
 bool DirectiveRegistry::is_directive(const std::string &mnemonic) const {
@@ -275,6 +280,59 @@ DirectiveResult OrgDirective::process_pass1(const Line &line,
 std::string OrgDirective::generate_object_code(const Line &line,
                                                const SymbolTable &symtab) {
   return ""; // ORG generates no object code
+}
+
+DirectiveResult EquDirective::process_pass1(const Line &line,
+                                            int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0; // EQU doesn't allocate space
+  result.should_add_to_symbol_table =
+      false; // We handle symbol insertion manually
+  return result;
+}
+
+std::string EquDirective::generate_object_code(const Line &line,
+                                               const SymbolTable &symtab) {
+  return ""; // EQU generates no object code
+}
+
+DirectiveResult CsectDirective::process_pass1(const Line &line,
+                                              int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0; // CSECT doesn't allocate space
+  result.should_add_to_symbol_table = false;
+  return result;
+}
+
+std::string CsectDirective::generate_object_code(const Line &line,
+                                                 const SymbolTable &symtab) {
+  return ""; // CSECT generates no object code
+}
+
+DirectiveResult ExtdefDirective::process_pass1(const Line &line,
+                                               int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0; // EXTDEF doesn't allocate space
+  result.should_add_to_symbol_table = false;
+  return result;
+}
+
+std::string ExtdefDirective::generate_object_code(const Line &line,
+                                                  const SymbolTable &symtab) {
+  return ""; // EXTDEF generates no object code
+}
+
+DirectiveResult ExtrefDirective::process_pass1(const Line &line,
+                                               int current_address) {
+  DirectiveResult result;
+  result.bytes_allocated = 0; // EXTREF doesn't allocate space
+  result.should_add_to_symbol_table = false;
+  return result;
+}
+
+std::string ExtrefDirective::generate_object_code(const Line &line,
+                                                  const SymbolTable &symtab) {
+  return ""; // EXTREF generates no object code
 }
 
 } // namespace sicxe

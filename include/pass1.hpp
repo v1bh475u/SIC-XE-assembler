@@ -1,6 +1,7 @@
 #ifndef PASS1_HPP
 #define PASS1_HPP
 
+#include "control_section.hpp"
 #include "directive.hpp"
 #include "error_handler.hpp"
 #include "line.hpp"
@@ -23,6 +24,18 @@ public:
   const std::vector<Line> &get_lines() const { return lines_; }
   int get_program_length() const { return program_length_; }
   int get_start_address() const { return start_address_; }
+  const std::vector<std::string> &get_extdef_symbols() const {
+    return extdef_symbols_;
+  }
+  const std::vector<std::string> &get_extref_symbols() const {
+    return extref_symbols_;
+  }
+  const std::string &get_program_name() const { return program_name_; }
+  const std::vector<ControlSection> &get_control_sections() const {
+    return control_sections_;
+  }
+  bool has_multiple_sections() const { return control_sections_.size() > 1; }
+  bool uses_control_sections() const { return !control_sections_.empty(); }
 
   [[nodiscard]] bool has_errors() const { return error_handler_.has_errors(); }
   [[nodiscard]] const Pass1ErrorHandler &get_error_handler() const {
@@ -46,6 +59,9 @@ private:
   void parse_addressing_mode(Line &line);
   int calculate_size(const Line &line);
 
+  void start_new_section(const std::string &name, int start_addr);
+  void finalize_current_section();
+
   const OpcodeEncoder &encoder_;
   DirectiveRegistry directive_registry_;
   SymbolTable symbol_table_;
@@ -55,6 +71,11 @@ private:
   int start_address_;
   int program_length_;
   std::optional<int> saved_location_counter_;
+  std::string program_name_;
+  std::vector<std::string> extdef_symbols_;
+  std::vector<std::string> extref_symbols_;
+  std::vector<ControlSection> control_sections_;
+  int current_section_index_;
 
   Pass1ErrorHandler error_handler_;
   Pass1WarningHandler warning_handler_;

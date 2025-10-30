@@ -15,7 +15,9 @@ Pass2::Pass2(const OpcodeEncoder &encoder, const SymbolTable &symbol_table,
 
 std::vector<std::string>
 Pass2::generate_object_code(const std::vector<Line> &lines,
-                            const std::string &program_name) {
+                            const std::string &program_name,
+                            const std::vector<std::string> &extdef_symbols,
+                            const std::vector<std::string> &extref_symbols) {
   std::vector<std::string> object_code;
 
   // Generate Header record
@@ -29,6 +31,20 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
 
   object_code.push_back(
       generate_header_record(prog_name, start_address_, program_length_));
+
+  if (!extdef_symbols.empty()) {
+    std::string d_record = generate_define_record(extdef_symbols);
+    if (!d_record.empty()) {
+      object_code.push_back(d_record);
+    }
+  }
+
+  if (!extref_symbols.empty()) {
+    std::string r_record = generate_refer_record(extref_symbols);
+    if (!r_record.empty()) {
+      object_code.push_back(r_record);
+    }
+  }
 
   // Generate Text records and track modification records
   std::string current_text;
@@ -122,13 +138,45 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
       bool needs_modification = false;
       int mod_address = 0;
       int mod_length = 0;
+      std::string mod_symbol = "";
 
-      if (is_operand_relocatable(line)) {
+      std::string operand_symbol = "";
+      if (line.has_operand()) {
+        operand_symbol = line.operand.value();
+        if (!operand_symbol.empty() &&
+            (operand_symbol[0] == '#' || operand_symbol[0] == '@')) {
+          operand_symbol = operand_symbol.substr(1);
+        }
+        if (!operand_symbol.empty() && operand_symbol.back() == ',') {
+          size_t comma_pos = operand_symbol.find(',');
+          if (comma_pos != std::string::npos) {
+            operand_symbol = operand_symbol.substr(0, comma_pos);
+          }
+        }
+      }
+
+      bool is_extref = false;
+      if (!operand_symbol.empty()) {
+        auto sym = symbol_table_.lookup(operand_symbol);
+        if (sym.has_value() && sym->is_external) {
+          is_extref = true;
+          if (!line.is_extended) {
+            error_handler_.add_format_error("EXTREF symbol '" + operand_symbol +
+                                                "' must use format 4 (+)",
+                                            line.line_number);
+          }
+        }
+      }
+
+      if (is_operand_relocatable(line) || is_extref) {
         // Format 4: 20-bit address field (5 half-bytes)
         if (line.is_extended && code.length() == 8) {
           needs_modification = true;
           mod_address = line.address + 1; // Address field starts at byte 1
           mod_length = 5;                 // 20 bits = 5 half-bytes
+          if (is_extref) {
+            mod_symbol = operand_symbol;
+          }
         }
         // Format 3 with SIC-compatible addressing (n=0, i=0): 12-bit address (3
         // half-bytes) but we need to modify only if it's direct addressing
@@ -143,7 +191,7 @@ Pass2::generate_object_code(const std::vector<Line> &lines,
 
       if (needs_modification) {
         modification_records.push_back(
-            generate_modification_record(mod_address, mod_length));
+            generate_modification_record(mod_address, mod_length, mod_symbol));
       }
 
       // Check if adding this instruction would exceed 30 bytes (60 hex chars)
@@ -205,14 +253,73 @@ std::string Pass2::generate_text_record(int start_addr,
 }
 
 std::string Pass2::generate_modification_record(int address,
-                                                int length_half_bytes) {
+                                                int length_half_bytes,
+                                                const std::string &symbol) {
   std::ostringstream oss;
 
-  // Format: M^address^length_in_half_bytes
-  // For format 4 instructions, the address field starts at byte 1 (after
-  // opcode) and is 20 bits (5 hex digits = 5 half-bytes)
+  // Format: M^address^length_in_half_bytes[^+/-symbol]
   oss << "M" << std::hex << std::uppercase << std::setfill('0') << std::setw(6)
       << address << std::setw(2) << length_half_bytes;
+
+  if (!symbol.empty()) {
+    oss << "+" << symbol; // Default to addition
+  }
+
+  return oss.str();
+}
+
+std::string
+Pass2::generate_define_record(const std::vector<std::string> &symbols) {
+  if (symbols.empty()) {
+    return "";
+  }
+
+  std::ostringstream oss;
+  oss << "D";
+
+  for (const auto &sym : symbols) {
+    // Get symbol address from symbol table
+    auto addr = symbol_table_.get_address(sym);
+    if (addr.has_value()) {
+      // Format: symbol_name(6 chars, left-aligned, space-padded)^address(6 hex)
+      std::string name = sym;
+      if (name.length() > 6) {
+        name = name.substr(0, 6);
+      }
+      // Pad name to 6 characters
+      while (name.length() < 6) {
+        name += ' ';
+      }
+      oss << name;
+      oss << std::hex << std::uppercase << std::setfill('0') << std::setw(6)
+          << addr.value();
+    }
+  }
+
+  return oss.str();
+}
+
+std::string
+Pass2::generate_refer_record(const std::vector<std::string> &symbols) {
+  if (symbols.empty()) {
+    return "";
+  }
+
+  std::ostringstream oss;
+  oss << "R";
+
+  for (const auto &sym : symbols) {
+    // Format: symbol_name(6 chars, left-aligned, space-padded)
+    std::string name = sym;
+    if (name.length() > 6) {
+      name = name.substr(0, 6);
+    }
+    // Pad name to 6 characters
+    while (name.length() < 6) {
+      name += ' ';
+    }
+    oss << name;
+  }
 
   return oss.str();
 }
@@ -469,6 +576,12 @@ int Pass2::resolve_operand(const std::string &operand, int /*current_address*/,
 
   // Handle immediate values
   if (line.addressing_mode == AddressingMode::IMMEDIATE) {
+    // First check if it's a symbol (including EQU symbols)
+    auto addr = symbol_table_.get_address(operand);
+    if (addr.has_value()) {
+      return addr.value();
+    }
+
     try {
       // Try decimal first
       return std::stoi(operand);

@@ -25,6 +25,9 @@ enum class DirectiveType {
   LTORG,
   EQU,
   ORG,
+  CSECT,
+  EXTDEF,
+  EXTREF,
   UNKNOWN
 };
 
@@ -142,6 +145,34 @@ public:
 };
 
 class OrgDirective : public DirectiveHandler {
+public:
+  DirectiveResult process_pass1(const Line &line, int current_address) override;
+  std::string generate_object_code(const Line &line,
+                                   const SymbolTable &symtab) override;
+};
+
+class EquDirective : public DirectiveHandler {
+public:
+  DirectiveResult process_pass1(const Line &line, int current_address) override;
+  std::string generate_object_code(const Line &line,
+                                   const SymbolTable &symtab) override;
+};
+
+class CsectDirective : public DirectiveHandler {
+public:
+  DirectiveResult process_pass1(const Line &line, int current_address) override;
+  std::string generate_object_code(const Line &line,
+                                   const SymbolTable &symtab) override;
+};
+
+class ExtdefDirective : public DirectiveHandler {
+public:
+  DirectiveResult process_pass1(const Line &line, int current_address) override;
+  std::string generate_object_code(const Line &line,
+                                   const SymbolTable &symtab) override;
+};
+
+class ExtrefDirective : public DirectiveHandler {
 public:
   DirectiveResult process_pass1(const Line &line, int current_address) override;
   std::string generate_object_code(const Line &line,

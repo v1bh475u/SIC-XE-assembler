@@ -22,7 +22,9 @@ public:
 
   std::vector<std::string>
   generate_object_code(const std::vector<Line> &lines,
-                       const std::string &program_name = "");
+                       const std::string &program_name = "",
+                       const std::vector<std::string> &extdef_symbols = {},
+                       const std::vector<std::string> &extref_symbols = {});
 
   [[nodiscard]] bool has_errors() const { return error_handler_.has_errors(); }
   [[nodiscard]] const Pass2ErrorHandler &get_error_handler() const {
@@ -53,8 +55,11 @@ private:
                                      int length);
   std::string generate_text_record(int start_addr,
                                    const std::string &object_code);
-  std::string generate_modification_record(int address, int length_half_bytes);
+  std::string generate_modification_record(int address, int length_half_bytes,
+                                           const std::string &symbol = "");
   std::string generate_end_record(int first_exec_addr);
+  std::string generate_define_record(const std::vector<std::string> &symbols);
+  std::string generate_refer_record(const std::vector<std::string> &symbols);
 
   const OpcodeEncoder &encoder_;
   const SymbolTable &symbol_table_;

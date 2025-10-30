@@ -34,21 +34,58 @@ void Assembler::assemble(const std::string &input_filename,
   std::cout << "Program length: 0x" << std::hex << pass1.get_program_length()
             << std::dec << "\n\n";
 
-  Pass2 pass2(encoder, pass1.get_symbol_table(), pass1.get_literal_table(),
-              pass1.get_start_address(), pass1.get_program_length());
-  auto object_code = pass2.generate_object_code(pass1.get_lines());
+  std::vector<std::string> object_code;
+  bool has_errors = false;
 
-  if (pass2.has_errors()) {
-    std::cerr << "\n";
-    pass2.get_error_handler().print_errors();
-    std::cerr << "\nAssembly failed due to Pass 2 errors.\n";
-    return;
-  }
+  if (pass1.uses_control_sections()) {
+    for (const auto &section : pass1.get_control_sections()) {
+      Pass2 pass2(encoder, section.symbol_table, section.literal_table,
+                  section.start_address, section.length);
+      auto section_code = pass2.generate_object_code(
+          section.lines, section.name, section.extdef_symbols,
+          section.extref_symbols);
 
-  if (pass2.has_warnings()) {
-    std::cerr << "\n";
-    pass2.get_warning_handler().print_warnings();
-    std::cerr << "\n";
+      if (pass2.has_errors()) {
+        std::cerr << "\n";
+        pass2.get_error_handler().print_errors();
+        std::cerr << "\nAssembly failed due to Pass 2 errors in section "
+                  << section.name << ".\n";
+        has_errors = true;
+      }
+
+      if (pass2.has_warnings()) {
+        std::cerr << "\n";
+        pass2.get_warning_handler().print_warnings();
+        std::cerr << "\n";
+      }
+
+      if (has_errors) {
+        return;
+      }
+
+      object_code.insert(object_code.end(), section_code.begin(),
+                         section_code.end());
+    }
+  } else {
+    // Backward compatibility: old programs without START or CSECT
+    Pass2 pass2(encoder, pass1.get_symbol_table(), pass1.get_literal_table(),
+                pass1.get_start_address(), pass1.get_program_length());
+    object_code = pass2.generate_object_code(
+        pass1.get_lines(), pass1.get_program_name(), pass1.get_extdef_symbols(),
+        pass1.get_extref_symbols());
+
+    if (pass2.has_errors()) {
+      std::cerr << "\n";
+      pass2.get_error_handler().print_errors();
+      std::cerr << "\nAssembly failed due to Pass 2 errors.\n";
+      return;
+    }
+
+    if (pass2.has_warnings()) {
+      std::cerr << "\n";
+      pass2.get_warning_handler().print_warnings();
+      std::cerr << "\n";
+    }
   }
 
   std::cout << "Pass 2 complete. Object code generated.\n\n";
