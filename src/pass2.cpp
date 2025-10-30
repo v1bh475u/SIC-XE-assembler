@@ -338,6 +338,17 @@ std::string Pass2::encode_instruction(const Line &line) {
   if (line.mnemonic == "*LITERAL*" && line.operand.has_value()) {
     auto lit = literal_table_.lookup(line.operand.value());
     if (lit.has_value()) {
+      // Check if this is a =* literal (address literal)
+      // The name is =*_N where N is a counter, so check if it starts with =*
+      if (lit->name.length() >= 2 && lit->name.substr(0, 2) == "=*") {
+        if (lit->reference_address.has_value()) {
+          int addr = lit->reference_address.value();
+          std::ostringstream oss;
+          oss << std::hex << std::uppercase << std::setfill('0') << std::setw(6)
+              << addr;
+          return oss.str();
+        }
+      }
       return LiteralParser::bytes_to_hex(lit->value);
     }
     return "";
@@ -379,8 +390,83 @@ std::string Pass2::encode_instruction(const Line &line) {
   } else if (format == 2) {
     Format2 fmt;
     fmt.opcode = opcode_def->opcode;
-    fmt.r1 = 0; // TODO: Parse register operands
+    fmt.r1 = 0;
     fmt.r2 = 0;
+
+    if (line.operand.has_value()) {
+      std::string operand = line.operand.value();
+      size_t comma_pos = operand.find(',');
+
+      if (comma_pos != std::string::npos) {
+        // Two operands: r1,r2 (or r1,n for SHIFTL/SHIFTR)
+        std::string r1_name = operand.substr(0, comma_pos);
+        std::string r2_name = operand.substr(comma_pos + 1);
+
+        // Trim whitespace
+        r1_name.erase(0, r1_name.find_first_not_of(" \t"));
+        r1_name.erase(r1_name.find_last_not_of(" \t") + 1);
+        r2_name.erase(0, r2_name.find_first_not_of(" \t"));
+        r2_name.erase(r2_name.find_last_not_of(" \t") + 1);
+
+        auto r1_num = register_encoder_.get_register_number(r1_name);
+
+        if (r1_num.has_value()) {
+          fmt.r1 = r1_num.value();
+        } else {
+          error_handler_.add_error(ErrorCode::INVALID_OPERAND,
+                                   "Invalid register: " + r1_name,
+                                   line.line_number);
+        }
+
+        // Check if r2 is a register or a number (for SHIFTL, SHIFTR)
+        auto r2_num = register_encoder_.get_register_number(r2_name);
+        if (r2_num.has_value()) {
+          fmt.r2 = r2_num.value();
+        } else {
+          // Try parsing as a number
+          try {
+            int n = std::stoi(r2_name);
+            if (n >= 0 && n <= 15) {
+              fmt.r2 = static_cast<uint8_t>(n);
+            } else {
+              error_handler_.add_error(ErrorCode::INVALID_OPERAND,
+                                       "Value out of range (0-15): " + r2_name,
+                                       line.line_number);
+            }
+          } catch (...) {
+            error_handler_.add_error(ErrorCode::INVALID_OPERAND,
+                                     "Invalid register or value: " + r2_name,
+                                     line.line_number);
+          }
+        }
+      } else {
+        // Single operand: r1 or n
+        operand.erase(0, operand.find_first_not_of(" \t"));
+        operand.erase(operand.find_last_not_of(" \t") + 1);
+
+        auto r1_num = register_encoder_.get_register_number(operand);
+        if (r1_num.has_value()) {
+          fmt.r1 = r1_num.value();
+        } else {
+          // Try parsing as a number (for SVC)
+          try {
+            int n = std::stoi(operand);
+            if (n >= 0 && n <= 15) {
+              fmt.r1 = static_cast<uint8_t>(n);
+            } else {
+              error_handler_.add_error(ErrorCode::INVALID_OPERAND,
+                                       "Value out of range (0-15): " + operand,
+                                       line.line_number);
+            }
+          } catch (...) {
+            error_handler_.add_error(ErrorCode::INVALID_OPERAND,
+                                     "Invalid register or value: " + operand,
+                                     line.line_number);
+          }
+        }
+      }
+    }
+
     return encode_format2(fmt);
   } else if (format == 3) {
     Format3 fmt;

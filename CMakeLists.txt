@@ -21,6 +21,7 @@ set(SOURCES
     src/symbol_table.cpp
     src/instruction.cpp
     src/opcode_encoder.cpp
+    src/register_encoder.cpp
     src/pass1.cpp
     src/pass2.cpp
     src/addressing_mode.cpp

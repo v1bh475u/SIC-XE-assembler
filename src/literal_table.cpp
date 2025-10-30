@@ -3,15 +3,21 @@
 namespace sicxe {
 
 Literal &LiteralTable::add_literal(const std::string &name,
-                                   const std::vector<uint8_t> &value) {
+                                   const std::vector<uint8_t> &value,
+                                   bool allow_dedup,
+                                   std::optional<int> ref_addr) {
   // Check if literal with same value already exists (deduplication by value)
-  int idx = find_by_value(value);
-  if (idx != -1) {
-    return literals_[idx];
+  // Only deduplicate if allow_dedup is true
+  if (allow_dedup) {
+    int idx = find_by_value(value);
+    if (idx != -1) {
+      return literals_[idx];
+    }
   }
 
   // Add new literal
-  literals_.emplace_back(name, value);
+  literals_.emplace_back(name, value, allow_dedup);
+  literals_.back().reference_address = ref_addr;
   return literals_.back();
 }
 
@@ -49,6 +55,14 @@ void LiteralTable::assign_address(const std::string &name, int address) {
   int idx = find_index(name);
   if (idx != -1) {
     literals_[idx].address = address;
+  }
+}
+
+void LiteralTable::update_reference_address(const std::string &name,
+                                            int ref_address) {
+  int idx = find_index(name);
+  if (idx != -1) {
+    literals_[idx].reference_address = ref_address;
   }
 }
 

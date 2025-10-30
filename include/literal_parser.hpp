@@ -21,6 +21,8 @@ public:
 
   static bool is_char_literal(const std::string &str);
 
+  static bool is_address_literal(const std::string &str);
+
   static Result<std::vector<uint8_t>, ErrorInfo>
   parse_literal(const std::string &literal);
 

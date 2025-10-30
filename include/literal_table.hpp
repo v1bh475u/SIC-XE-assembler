@@ -11,7 +11,9 @@ namespace sicxe {
 class LiteralTable {
 public:
   Literal &add_literal(const std::string &name,
-                       const std::vector<uint8_t> &value);
+                       const std::vector<uint8_t> &value,
+                       bool allow_dedup = true,
+                       std::optional<int> ref_addr = std::nullopt);
 
   std::optional<Literal> lookup(const std::string &name) const;
 
@@ -22,6 +24,8 @@ public:
   std::vector<std::string> get_unaddressed_literal_names() const;
 
   void assign_address(const std::string &name, int address);
+
+  void update_reference_address(const std::string &name, int ref_address);
 
   const std::vector<Literal> &get_all() const { return literals_; }
 

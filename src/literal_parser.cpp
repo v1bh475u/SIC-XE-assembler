@@ -16,6 +16,10 @@ bool LiteralParser::is_char_literal(const std::string &str) {
          str.back() == '\'';
 }
 
+bool LiteralParser::is_address_literal(const std::string &str) {
+  return str == "*";
+}
+
 Result<std::vector<uint8_t>, ErrorInfo>
 LiteralParser::parse_hex_literal(const std::string &literal) {
   if (!is_hex_literal(literal)) {
@@ -79,6 +83,10 @@ LiteralParser::parse_literal(const std::string &literal) {
     return parse_hex_literal(literal);
   } else if (is_char_literal(literal)) {
     return parse_char_literal(literal);
+  } else if (is_address_literal(literal)) {
+    // For =*, return a placeholder (will be replaced with actual address later)
+    // Using 3 bytes for a word (address)
+    return std::vector<uint8_t>{0x00, 0x00, 0x00};
   } else {
     return ErrorInfo(ErrorCode::MALFORMED_LITERAL,
                      "Unknown literal format: " + literal);

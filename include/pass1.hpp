@@ -56,7 +56,7 @@ private:
   Line parse_line(const std::string &source_line, int line_num);
 
   void classify_line(Line &line);
-  void parse_addressing_mode(Line &line);
+  void parse_addressing_mode(Line &line, int current_address);
   int calculate_size(const Line &line);
 
   void start_new_section(const std::string &name, int start_addr);
@@ -76,6 +76,7 @@ private:
   std::vector<std::string> extref_symbols_;
   std::vector<ControlSection> control_sections_;
   int current_section_index_;
+  int star_literal_counter_;
 
   Pass1ErrorHandler error_handler_;
   Pass1WarningHandler warning_handler_;

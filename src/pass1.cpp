@@ -9,7 +9,7 @@ namespace sicxe {
 
 Pass1::Pass1(const OpcodeEncoder &encoder)
     : encoder_(encoder), location_counter_(0), start_address_(0),
-      program_length_(0), current_section_index_(0) {}
+      program_length_(0), current_section_index_(0), star_literal_counter_(0) {}
 
 void Pass1::process(const std::string &filename) {
   std::ifstream file(filename);
@@ -246,15 +246,20 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
       }
 
       if (line.has_operand()) {
-        // ORG with operand: can be a decimal value, hex in X'...' format, or a
-        // symbol
+        // ORG with operand: can be a decimal value, hex in X'...' format, a
+        // symbol, or '*' (current location counter)
         std::string operand = line.operand.value();
         int new_address = -1;
         bool valid = false;
 
+        // Check if operand is '*' (current location counter)
+        if (operand == "*") {
+          new_address = location_counter_;
+          valid = true;
+        }
         // Check if operand is in X'...' format (hexadecimal)
-        if (operand.length() >= 3 && operand[0] == 'X' && operand[1] == '\'' &&
-            operand.back() == '\'') {
+        else if (operand.length() >= 3 && operand[0] == 'X' &&
+                 operand[1] == '\'' && operand.back() == '\'') {
           // Extract hex value from X'...'
           std::string hex_str = operand.substr(2, operand.length() - 3);
           try {
@@ -386,6 +391,15 @@ void Pass1::process_line(const std::string &source_line, int line_num) {
   int size = calculate_size(line);
   location_counter_ += size;
 
+  if (line.type == LineType::INSTRUCTION && line.has_operand()) {
+    std::string op = line.operand.value();
+    if (op.length() >= 2 && op.substr(0, 2) == "=*") {
+      // This is a =* literal, update its reference address to point after this
+      // instruction
+      literal_table_.update_reference_address(op, location_counter_);
+    }
+  }
+
   lines_.push_back(line);
 }
 
@@ -408,6 +422,34 @@ Line Pass1::parse_line(const std::string &source_line, int line_num) {
     line.type = LineType::COMMENT;
     line.mnemonic = trimmed;
     return line;
+  }
+
+  // Strip inline comments (period not at start of line)
+  size_t comment_pos = trimmed.find('.');
+  if (comment_pos != std::string::npos && comment_pos > 0) {
+    // Check if the period is part of a literal or string
+    // Simple heuristic: if there's a quote before the period, check if it's
+    // closed
+    size_t quote_pos = trimmed.find('\'');
+    bool in_literal = false;
+    if (quote_pos != std::string::npos && quote_pos < comment_pos) {
+      // Check if there's a closing quote after the opening quote but before
+      // comment
+      size_t close_quote = trimmed.find('\'', quote_pos + 1);
+      if (close_quote != std::string::npos && close_quote < comment_pos) {
+        // The period is after the literal, so it's a comment
+        in_literal = false;
+      } else if (close_quote == std::string::npos ||
+                 close_quote > comment_pos) {
+        // The period might be inside a literal
+        in_literal = true;
+      }
+    }
+
+    if (!in_literal) {
+      trimmed = trimmed.substr(0, comment_pos);
+      trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
+    }
   }
 
   std::istringstream iss(trimmed);
@@ -459,7 +501,7 @@ Line Pass1::parse_line(const std::string &source_line, int line_num) {
 
   // Parse addressing mode for instructions
   if (line.type == LineType::INSTRUCTION && line.has_operand()) {
-    parse_addressing_mode(line);
+    parse_addressing_mode(line, location_counter_);
   }
 
   return line;
@@ -483,7 +525,7 @@ void Pass1::classify_line(Line &line) {
   line.type = LineType::INSTRUCTION; // Set a default to continue processing
 }
 
-void Pass1::parse_addressing_mode(Line &line) {
+void Pass1::parse_addressing_mode(Line &line, int current_address) {
   if (!line.operand.has_value())
     return;
 
@@ -502,9 +544,22 @@ void Pass1::parse_addressing_mode(Line &line) {
 
   if (!op.empty() && op[0] == '=') {
     line.addressing_mode = AddressingMode::SIMPLE;
-    auto parse_result = LiteralParser::parse_literal(op.substr(1));
+    std::string literal_content = op.substr(1);
+    auto parse_result = LiteralParser::parse_literal(literal_content);
     if (parse_result.is_ok()) {
-      literal_table_.add_literal(op, parse_result.value());
+      bool is_star_literal = LiteralParser::is_address_literal(literal_content);
+      bool allow_dedup = !is_star_literal;
+
+      std::string unique_name = op;
+      std::optional<int> ref_addr = std::nullopt;
+      if (is_star_literal) {
+        unique_name = op + "_" + std::to_string(star_literal_counter_++);
+        ref_addr = current_address;
+      }
+
+      literal_table_.add_literal(unique_name, parse_result.value(), allow_dedup,
+                                 ref_addr);
+      op = unique_name;
     } else {
       error_handler_.add_syntax_error(parse_result.error().message,
                                       line.line_number);

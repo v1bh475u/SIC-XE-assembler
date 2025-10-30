@@ -7,6 +7,7 @@
 #include "line.hpp"
 #include "literal_table.hpp"
 #include "opcode_encoder.hpp"
+#include "register_encoder.hpp"
 #include "symbol_table.hpp"
 #include "warning_handler.hpp"
 #include <string>
@@ -65,6 +66,7 @@ private:
   const SymbolTable &symbol_table_;
   const LiteralTable &literal_table_;
   DirectiveRegistry directive_registry_;
+  RegisterEncoder register_encoder_;
   int start_address_;
   int program_length_;
 
