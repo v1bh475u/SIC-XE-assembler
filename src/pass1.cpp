@@ -407,6 +407,9 @@ Line Pass1::parse_line(const std::string &source_line, int line_num) {
   Line line;
   line.line_number = line_num;
 
+  bool starts_with_whitespace =
+      !source_line.empty() && (source_line[0] == ' ' || source_line[0] == '\t');
+
   // Trim whitespace
   std::string trimmed = source_line;
   trimmed.erase(0, trimmed.find_first_not_of(" \t"));
@@ -476,13 +479,22 @@ Line Pass1::parse_line(const std::string &source_line, int line_num) {
     remaining.erase(0, remaining.find_first_not_of(" \t"));
 
     if (!remaining.empty()) {
-      // label mnemonic operand
-      line.label = first;
-      line.mnemonic = second;
-      line.operand = remaining;
+      // Could be: label mnemonic operand OR mnemonic operand_part1
+      // operand_part2 If line starts with whitespace, there's no label
+      if (starts_with_whitespace) {
+        // mnemonic operand (operand has spaces, like "TABLE2, X")
+        line.mnemonic = first;
+        line.operand = second + " " + remaining;
+      } else {
+        // label mnemonic operand
+        line.label = first;
+        line.mnemonic = second;
+        line.operand = remaining;
+      }
     } else {
       // mnemonic operand OR label mnemonic
-      if (encoder_.is_instruction(first) ||
+      // If line starts with whitespace, no label
+      if (starts_with_whitespace || encoder_.is_instruction(first) ||
           string_to_directive(first) != DirectiveType::UNKNOWN) {
         line.mnemonic = first;
         line.operand = second;
