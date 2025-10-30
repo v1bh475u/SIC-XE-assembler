@@ -11,7 +11,7 @@ PROG    START   0
         LDA     =X'05'
         LDA     =X'05'    . Should deduplicate
         LDA     =X'F1'
-        LDA     =X'F1'   . Leading zero should deduplicate
+    LDA     =X'0F1'   . Leading zero should deduplicate
         LDA     =X'ABCD'
         LDA     =X'ABCD'  . Should deduplicate
         

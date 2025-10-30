@@ -14,7 +14,7 @@ PROG    START   0
 
 NEAR    WORD    1
 PCNEG   WORD    2
-        RESB    2040      . Gap to test boundary
+        RESB    2035      . Gap to test boundary
 PC2047  WORD    3         . Exactly at PC+2047
         RESB    100
 FAR     WORD    4         . Beyond PC-relative range

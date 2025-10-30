@@ -17,14 +17,14 @@ PROG    START   0
         +LDA    #1048575  . Max 20-bit value
 
 . Immediate with hex notation
-        LDA     #X'0F'
-        LDA     #X'FF'
+.        LDA     #X'0F'
+.        LDA     #X'FF'
         +LDA    #X'FFFF'
 
 . Immediate mode with different instructions
         COMP    #0
-        AND     #X'FF'
-        OR      #X'0F'
+.        AND     #X'FF'
+.        OR      #X'0F'
         ADD     #100
         SUB     #50
 

@@ -481,8 +481,19 @@ std::string Pass2::encode_instruction(const Line &line) {
       int pc = line.address + 3;
       int displacement = target_address - pc;
 
-      // For immediate mode, the value is in the displacement field directly
+      // For immediate mode, check if it's a symbol or a literal value
+      // If it's a symbol, we still need PC/base-relative addressing
+      bool is_immediate_symbol = false;
       if (line.addressing_mode == AddressingMode::IMMEDIATE) {
+        // Check if operand is a symbol (not a literal number)
+        auto addr = symbol_table_.get_address(line.operand.value());
+        is_immediate_symbol = addr.has_value();
+      }
+
+      // For immediate mode with a literal value (not a symbol), put value
+      // directly
+      if (line.addressing_mode == AddressingMode::IMMEDIATE &&
+          !is_immediate_symbol) {
         // Immediate value goes directly in displacement (12 bits)
         fmt.displacement = target_address & 0xFFF;
         fmt.flags.p = false; // No PC-relative for immediate
@@ -630,11 +641,6 @@ bool Pass2::is_operand_relocatable(const Line &line) const {
 
   if (!operand.empty() && operand[0] == '=') {
     return true;
-  }
-
-  // Immediate addressing mode: value is absolute (not relocatable)
-  if (line.addressing_mode == AddressingMode::IMMEDIATE) {
-    return false;
   }
 
   // Check if operand is a symbol
